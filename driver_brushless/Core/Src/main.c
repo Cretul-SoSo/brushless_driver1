@@ -25,7 +25,6 @@
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
 typedef struct
 {
 	GPIO_TypeDef * JoyStick_xGPIO;
@@ -36,15 +35,11 @@ typedef struct
 	uint32_t       ADCx_CH;
 	uint32_t       ADCy_CH;
 }JoyStick_CfgType;
-/* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-#define JOYSTICK_UNITS  1
 #define JoyStick1    	0
-#define X				0
-#define Y				1
-/* USER CODE END PD */
+#define X				0 // potentiometrul de pe oX
+#define Y				1 // potentiometrul de pe oY
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
@@ -70,56 +65,46 @@ static void MX_USART2_UART_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
-void JoyStick_Init(uint16_t JoyStick_Instance);
-void JoyStick_Read(uint16_t JoyStick_Instance, uint16_t* JoyStick_XY);
+uint16_t MAP(uint16_t val, uint16_t in_min, uint16_t in_max, uint16_t out_min, uint16_t out_max);
+void JoyStick_Init(void);
+void JoyStick_Read(uint16_t* JoyStick_XY);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-const JoyStick_CfgType JoyStick_CfgParam[JOYSTICK_UNITS] =
+const JoyStick_CfgType JoyStick_CfgParam =
 {
 	// JoyStick unit 1 Configurations
-    {
-	    GPIOC,
-		GPIOC,
-		GPIO_PIN_0,
-		GPIO_PIN_1,
-		ADC1,
-		ADC_CHANNEL_1,
-		ADC_CHANNEL_2
-	}
+	// se completeaza cu datele pinilor de la care se face citirea
+	GPIOC,
+	GPIOC,
+	GPIO_PIN_0,
+	GPIO_PIN_1,
+	ADC1,
+	ADC_CHANNEL_1,
+	ADC_CHANNEL_2
 };
-
-
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
+  * @brief  Comanda motor brushless cu ajutorul driverului Seaking 40A - RTR
   * @retval int
   */
 int main(void)
 {
-  /* USER CODE BEGIN 1 */
-  uint16_t JoyStick1_XY[2] = {0};
-  //uint16_t CH1_DC = 0;
-
-  /* USER CODE END 1 */
+  /* variabile locale */
+  /* vector cu 2 elem (un elem pentru fiecare potentiometru) */
+  uint16_t JoyStick1_XY[] = {0, 0};
+  /* tON al PWM-ului */
+  uint16_t CH1_DC = 0;
 
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
   /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
@@ -128,24 +113,24 @@ int main(void)
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
-  JoyStick_Init(JoyStick1);
+  JoyStick_Init();
   /* USER CODE END 2 */
 
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* USER CODE END WHILE */
-	JoyStick_Read(JoyStick1, JoyStick1_XY);
-	TIM2->CCR1 = JoyStick1_XY[Y];
+	/* citirea valorilor potentiometrelor */
+	JoyStick_Read(JoyStick1_XY);
+
+	/* comanda PWM de pe oY */
+	CH1_DC = JoyStick1_XY[X];
+	TIM2->CCR1 = MAP(CH1_DC, 503, 2386, 0, 65535);
+
+	/* transmitere PWM catre motor*/
 	while(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0))
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_SET);
 
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
-
-    /* USER CODE BEGIN 3 */
+ 	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_13, GPIO_PIN_RESET);
   }
-  /* USER CODE END 3 */
 }
 
 /**
@@ -398,40 +383,45 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void JoyStick_Init(uint16_t JoyStick_Instance)
+uint16_t MAP(uint16_t val, uint16_t in_min, uint16_t in_max, uint16_t out_min, uint16_t out_max)
+{
+	return (val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+void JoyStick_Init(void)
 {
 	GPIO_InitTypeDef GPIO_InitStruct = {0};
 
-	if(JoyStick_CfgParam[JoyStick_Instance].JoyStick_xGPIO == GPIOA || JoyStick_CfgParam[JoyStick_Instance].JoyStick_yGPIO == GPIOA)
+	if(JoyStick_CfgParam.JoyStick_xGPIO == GPIOA || JoyStick_CfgParam.JoyStick_yGPIO == GPIOA)
 	{
 		__HAL_RCC_GPIOA_CLK_ENABLE();
 	}
-	else if(JoyStick_CfgParam[JoyStick_Instance].JoyStick_xGPIO == GPIOB || JoyStick_CfgParam[JoyStick_Instance].JoyStick_yGPIO == GPIOB)
+	else if(JoyStick_CfgParam.JoyStick_xGPIO == GPIOB || JoyStick_CfgParam.JoyStick_yGPIO == GPIOB)
 	{
 		__HAL_RCC_GPIOB_CLK_ENABLE();
 	}
-	else if(JoyStick_CfgParam[JoyStick_Instance].JoyStick_xGPIO == GPIOC || JoyStick_CfgParam[JoyStick_Instance].JoyStick_yGPIO == GPIOC)
+	else if(JoyStick_CfgParam.JoyStick_xGPIO == GPIOC || JoyStick_CfgParam.JoyStick_yGPIO == GPIOC)
 	{
 		__HAL_RCC_GPIOC_CLK_ENABLE();
 	}
-	else if (JoyStick_CfgParam[JoyStick_Instance].JoyStick_xGPIO == GPIOD || JoyStick_CfgParam[JoyStick_Instance].JoyStick_yGPIO == GPIOD)
+	else if (JoyStick_CfgParam.JoyStick_xGPIO == GPIOD || JoyStick_CfgParam.JoyStick_yGPIO == GPIOD)
 	{
 		__HAL_RCC_GPIOD_CLK_ENABLE();
 	}
-	else if (JoyStick_CfgParam[JoyStick_Instance].JoyStick_xGPIO == GPIOE || JoyStick_CfgParam[JoyStick_Instance].JoyStick_yGPIO == GPIOE)
+	else if (JoyStick_CfgParam.JoyStick_xGPIO == GPIOE || JoyStick_CfgParam.JoyStick_yGPIO == GPIOE)
 	{
 		__HAL_RCC_GPIOD_CLK_ENABLE();
 	}
 
-	GPIO_InitStruct.Pin = JoyStick_CfgParam[JoyStick_Instance].JoyStick_xPIN;
+	GPIO_InitStruct.Pin = JoyStick_CfgParam.JoyStick_xPIN;
 	GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-    HAL_GPIO_Init(JoyStick_CfgParam[JoyStick_Instance].JoyStick_xGPIO, &GPIO_InitStruct);
+    HAL_GPIO_Init(JoyStick_CfgParam.JoyStick_xGPIO, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = JoyStick_CfgParam[JoyStick_Instance].JoyStick_yPIN;
+    GPIO_InitStruct.Pin = JoyStick_CfgParam.JoyStick_yPIN;
     GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-    HAL_GPIO_Init(JoyStick_CfgParam[JoyStick_Instance].JoyStick_yGPIO, &GPIO_InitStruct);
+    HAL_GPIO_Init(JoyStick_CfgParam.JoyStick_yGPIO, &GPIO_InitStruct);
 
-	hadc1.Instance = JoyStick_CfgParam[JoyStick_Instance].ADC_Instance;
+	hadc1.Instance = JoyStick_CfgParam.ADC_Instance;
 	hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
 	hadc1.Init.ContinuousConvMode = DISABLE;
 	hadc1.Init.DiscontinuousConvMode = DISABLE;
@@ -439,7 +429,7 @@ void JoyStick_Init(uint16_t JoyStick_Instance)
 	hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
 	hadc1.Init.NbrOfConversion = 1;
 	HAL_ADC_Init(&hadc1);
-    sConfig.Channel = JoyStick_CfgParam[JoyStick_Instance].ADCx_CH;
+    sConfig.Channel = JoyStick_CfgParam.ADCx_CH;
 	sConfig.Rank = ADC_REGULAR_RANK_1;
 	sConfig.SamplingTime = ADC_SAMPLETIME_24CYCLES_5;
 	HAL_ADC_ConfigChannel(&hadc1, &sConfig);
@@ -452,12 +442,12 @@ void JoyStick_Init(uint16_t JoyStick_Instance)
 }
 
 
-void JoyStick_Read(uint16_t JoyStick_Instance, uint16_t* JoyStick_XY)
+void JoyStick_Read(uint16_t* JoyStick_XY)
 {
 	uint32_t AD_RES;
 
 	// Select The JoyStick Instance ADC Channel For X
-	sConfig.Channel = JoyStick_CfgParam[JoyStick_Instance].ADCx_CH;
+	sConfig.Channel = JoyStick_CfgParam.ADCx_CH;
     HAL_ADC_ConfigChannel(&hadc1, &sConfig);
 	// Start ADC Conversion
 	HAL_ADC_Start(&hadc1);
@@ -468,7 +458,7 @@ void JoyStick_Read(uint16_t JoyStick_Instance, uint16_t* JoyStick_XY)
 	JoyStick_XY[0] = AD_RES;
 
 	// Select The JoyStick Instance ADC Channel For Y
-	sConfig.Channel = JoyStick_CfgParam[JoyStick_Instance].ADCy_CH;
+	sConfig.Channel = JoyStick_CfgParam.ADCy_CH;
 	HAL_ADC_ConfigChannel(&hadc1, &sConfig);
 	// Start ADC Conversion
 	HAL_ADC_Start(&hadc1);

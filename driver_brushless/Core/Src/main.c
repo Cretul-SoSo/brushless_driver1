@@ -123,7 +123,7 @@ int main(void)
 
 	/* comanda PWM de pe oY */
 	CH1_DC = JoyStick1_XY[X];
-	TIM2->CCR1 = MAP(CH1_DC, 503, 2386, 0, 65535);
+	TIM2->CCR1 = MAP(CH1_DC, 400, 2450, 0, 65535);
 
 	/* transmitere PWM catre motor*/
 	while(HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0))
